@@ -95,7 +95,7 @@ const pillLabel = computed(() => {
 const canInstall = computed(() => Boolean(
   result.value?.packaged
   && result.value?.platform === 'darwin'
-  && result.value?.asset
+  && (result.value?.asset || result.value?.parts?.length)
 ))
 const buttonTitle = computed(() => (
   available.value ? `发现新版本 v${result.value?.latestVersion}` : '检查更新'

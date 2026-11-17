@@ -54,11 +54,17 @@ const pickAsset = assets => (Array.isArray(assets) ? assets : []).find(asset => 
   /-mac\.zip$/i.test(asset.name || '') && !/blockmap|\.yml$/i.test(asset.name || '')
 ))
 
+const pickParts = assets => (Array.isArray(assets) ? assets : [])
+  .filter(asset => /-mac\.zip\.part\d+$/i.test(asset.name || ''))
+  .sort((a, b) => String(a.name).localeCompare(String(b.name)))
+
 const releasePayload = (release, currentVersion) => {
   const latestVersion = String(release.tag_name || release.name || '').replace(/^v/i, '')
   const asset = pickAsset(release.assets)
+  const parts = asset ? [] : pickParts(release.assets)
+  const available = Boolean(latestVersion && isNewer(latestVersion, currentVersion) && (asset || parts.length))
   return {
-    available: Boolean(asset && latestVersion && isNewer(latestVersion, currentVersion)),
+    available,
     currentVersion,
     latestVersion,
     releaseUrl: release.html_url || `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`,
@@ -72,6 +78,12 @@ const releasePayload = (release, currentVersion) => {
           url: asset.url
         }
       : null,
+    parts: parts.map(part => ({
+      id: part.id,
+      name: part.name,
+      size: part.size,
+      url: part.url
+    })),
     packaged: app.isPackaged,
     platform: process.platform
   }
@@ -136,35 +148,105 @@ const bundlePathFor = () => {
   return path.resolve(path.dirname(executable), '../..')
 }
 
+const downloadToFile = async (url, target, expectedSize = 0) => {
+  const response = await fetchWithTimeout(url, {
+    headers: { Accept: 'application/octet-stream' }
+  })
+  if (!response.ok || !response.body) throw new Error(`下载失败 (${response.status})`)
+  const stream = Readable.fromWeb(response.body)
+  const file = fs.createWriteStream(target)
+  stream.pipe(file)
+  await finished(file)
+  const stat = await fsp.stat(target)
+  if (expectedSize && stat.size !== expectedSize) {
+    throw new Error(`分段大小不一致 (${stat.size}/${expectedSize})`)
+  }
+  return stat.size
+}
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+const downloadParts = async (sender, parts, zipPath) => {
+  const total = parts.reduce((sum, part) => sum + Number(part.size || 0), 0)
+  const partPaths = []
+  let received = 0
+  sendProgress(sender, { phase: 'downloading', percent: 0, received: 0, total })
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i]
+    const target = `${zipPath}.part${String(i + 1).padStart(2, '0')}`
+    let lastError = null
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        await downloadToFile(part.url, target, Number(part.size || 0))
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+        await fsp.rm(target, { force: true })
+        await sleep(600 * attempt)
+      }
+    }
+    if (lastError) throw lastError
+    partPaths.push(target)
+    received += Number(part.size || 0)
+    sendProgress(sender, {
+      phase: 'downloading',
+      percent: total ? Math.min(99, Math.round((received / total) * 100)) : 0,
+      received,
+      total,
+      part: i + 1,
+      parts: parts.length
+    })
+  }
+  const output = fs.createWriteStream(zipPath)
+  for (const partPath of partPaths) {
+    for await (const chunk of fs.createReadStream(partPath)) {
+      if (!output.write(chunk)) await new Promise(resolve => output.once('drain', resolve))
+    }
+  }
+  await new Promise((resolve, reject) => {
+    output.end(resolve)
+    output.on('error', reject)
+  })
+  const stat = await fsp.stat(zipPath)
+  if (total && stat.size !== total) throw new Error(`合并后的安装包大小不一致 (${stat.size}/${total})`)
+  sendProgress(sender, { phase: 'downloading', percent: 100, received: total, total })
+  return total
+}
+
 const downloadAndInstall = async sender => {
   if (!app.isPackaged) throw new Error('开发模式不安装更新，请在打包版本中测试')
   if (process.platform !== 'darwin') throw new Error('当前更新器仅支持 macOS')
   const release = latestRelease || await checkForUpdates()
-  if (!release?.available || !release.asset) throw new Error('当前没有可安装的新版本')
+  if (!release?.available || (!release.asset && !release.parts?.length)) throw new Error('当前没有可安装的新版本')
 
   const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'bongmaster-update-'))
   const zipPath = path.join(root, 'BongMaster.zip')
   try {
-    sendProgress(sender, { phase: 'downloading', percent: 0 })
-    const response = await fetchWithTimeout(release.asset.url, {
-      headers: { Accept: 'application/octet-stream' }
-    })
-    if (!response.ok || !response.body) throw new Error(`下载失败 (${response.status})`)
-    const total = Number(response.headers.get('content-length')) || Number(release.asset.size) || 0
-    let received = 0
-    const file = fs.createWriteStream(zipPath)
-    const stream = Readable.fromWeb(response.body)
-    stream.on('data', chunk => {
-      received += chunk.length
-      sendProgress(sender, {
-        phase: 'downloading',
-        percent: total ? Math.min(100, Math.round((received / total) * 100)) : 0,
-        received,
-        total
+    if (release.parts?.length) {
+      await downloadParts(sender, release.parts, zipPath)
+    } else {
+      sendProgress(sender, { phase: 'downloading', percent: 0 })
+      const response = await fetchWithTimeout(release.asset.url, {
+        headers: { Accept: 'application/octet-stream' }
       })
-    })
-    stream.pipe(file)
-    await finished(file)
+      if (!response.ok || !response.body) throw new Error(`下载失败 (${response.status})`)
+      const total = Number(response.headers.get('content-length')) || Number(release.asset.size) || 0
+      let received = 0
+      const file = fs.createWriteStream(zipPath)
+      const stream = Readable.fromWeb(response.body)
+      stream.on('data', chunk => {
+        received += chunk.length
+        sendProgress(sender, {
+          phase: 'downloading',
+          percent: total ? Math.min(100, Math.round((received / total) * 100)) : 0,
+          received,
+          total
+        })
+      })
+      stream.pipe(file)
+      await finished(file)
+    }
 
     const appPath = bundlePathFor()
     if (!fs.existsSync(appPath)) throw new Error('找不到当前应用安装位置')
