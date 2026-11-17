@@ -12,7 +12,8 @@
     "build": "npm run build:vite && npm run build:electron",
     "build:vite": "vite build",
     "build:electron": "electron-builder",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "release": "bash scripts/release.sh"
   },
   "keywords": [
     "electron",
