@@ -340,6 +340,13 @@ await window.electronAPI.newMethod(data)
 - 仅支持 macOS arm64；应用需要放在当前用户可写的 Applications 目录。
 - 更新日志来自 GitHub Release（由提交记录自动生成），仓库内也维护 `CHANGELOG.md`。
 
+## 版本管理
+
+- 日常小改动直接提交到 `main`，不必发 Release；提交记录本身就是修改日志。
+- 只有需要让客户端更新时才发 Release：修复用 patch（如 5.2.1），功能用 minor（如 5.3.0），不兼容变更用 major。
+- 更新按钮只在 GitHub 最新 Release 高于当前安装版本时出现；没有新版本时不会显示按钮。
+- Release 的更新说明会显示在应用内更新面板中。
+
 发布新版本（推荐，本机构建后上传）：
 
 ```bash

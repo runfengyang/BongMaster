@@ -44,9 +44,9 @@
       </div>
 
       <div class="bm-navbar-actions">
-        <SalaryWidget v-if="salaryStore.visible" />
-
         <UpdateButton />
+
+        <SalaryWidget v-if="salaryStore.visible" />
 
         <button
           class="bm-theme-toggle"

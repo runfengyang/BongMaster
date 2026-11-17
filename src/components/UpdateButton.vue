@@ -1,23 +1,23 @@
 <template>
-  <div class="update-wrap">
+  <div v-if="visible" class="update-wrap">
     <button
       type="button"
-      class="bm-update-toggle"
-      :class="{ 'has-update': available }"
+      class="bm-update-pill"
+      :class="{ busy: busy }"
       :title="buttonTitle"
-      aria-label="检查更新"
+      aria-label="有新版本可用，打开更新"
       :aria-expanded="open"
       @click.stop="toggle"
     >
-      <i class="fas fa-download" aria-hidden="true"></i>
-      <span v-if="available" class="bm-update-dot" aria-hidden="true"></span>
+      <i class="fas" :class="busy ? 'fa-spinner fa-spin' : 'fa-arrow-circle-down'" aria-hidden="true"></i>
+      <span>{{ pillLabel }}</span>
     </button>
 
     <Transition name="update-pop">
       <section v-if="open" class="update-panel" role="dialog" aria-label="软件更新" @click.stop>
         <header class="update-head">
           <div>
-            <strong>软件更新</strong>
+            <strong>{{ available ? `发现新版本 v${result.latestVersion}` : '软件更新' }}</strong>
             <small>当前版本 v{{ currentVersion || '—' }}</small>
           </div>
           <button type="button" class="update-close" aria-label="关闭" @click="open = false">
@@ -53,7 +53,7 @@
             </p>
             <div class="update-actions">
               <button type="button" class="update-primary" :disabled="!canInstall" @click="install">
-                下载并安装
+                下载更新
               </button>
               <button type="button" class="update-secondary" @click="openRelease">查看 Release</button>
             </div>
@@ -81,8 +81,17 @@ const result = ref(null)
 const installError = ref('')
 const progress = ref({ phase: 'idle', percent: 0 })
 let offProgress = null
+let checkTimer = null
 
 const available = computed(() => Boolean(result.value?.available))
+const busy = computed(() => ['downloading', 'extracting', 'installing'].includes(progress.value.phase))
+const visible = computed(() => available.value || busy.value)
+const pillLabel = computed(() => {
+  if (progress.value.phase === 'downloading') return `下载中 ${progress.value.percent || 0}%`
+  if (progress.value.phase === 'extracting') return '正在解压'
+  if (progress.value.phase === 'installing') return '正在安装'
+  return '更新'
+})
 const canInstall = computed(() => Boolean(
   result.value?.packaged
   && result.value?.platform === 'darwin'
@@ -147,11 +156,13 @@ onMounted(async () => {
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onKeydown)
   window.setTimeout(checkNow, 1500)
+  checkTimer = window.setInterval(checkNow, 30 * 60 * 1000)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
   document.removeEventListener('keydown', onKeydown)
+  if (checkTimer) window.clearInterval(checkTimer)
   if (offProgress) offProgress()
 })
 </script>
@@ -162,41 +173,36 @@ onUnmounted(() => {
   display: flex;
 }
 
-.bm-update-toggle {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  display: flex;
+.bm-update-pill {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--bm-radius-md);
-  background: transparent;
-  color: var(--bm-text-secondary);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all var(--bm-transition-fast);
-}
-
-.bm-update-toggle:hover {
-  background: var(--bm-bg-hover);
-  color: var(--bm-text-primary);
-}
-
-.bm-update-toggle.has-update {
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--bm-accent-blue) 26%, var(--bm-border-default));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bm-accent-blue) 9%, var(--bm-bg-card));
   color: var(--bm-accent-blue);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--bm-transition-fast), border-color var(--bm-transition-fast);
 }
 
-.bm-update-dot {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #ff3b30;
-  box-shadow: 0 0 0 1.5px var(--bm-bg-card);
+.bm-update-pill:hover {
+  background: color-mix(in srgb, var(--bm-accent-blue) 15%, var(--bm-bg-card));
+}
+
+.bm-update-pill.busy {
+  border-color: var(--bm-border-default);
+  background: var(--bm-bg-hover);
+  color: var(--bm-text-secondary);
+}
+
+.bm-update-pill i {
+  font-size: 10.5px;
 }
 
 .update-panel {
