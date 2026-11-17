@@ -6,7 +6,6 @@ const path = require('path')
 const { spawn } = require('child_process')
 const { Readable } = require('stream')
 const { finished } = require('stream/promises')
-const extract = require('extract-zip')
 
 const REPO_OWNER = 'runfengyang'
 const REPO_NAME = 'BongMaster'
@@ -137,18 +136,6 @@ const bundlePathFor = () => {
   return path.resolve(path.dirname(executable), '../..')
 }
 
-const findExtractedApp = async root => {
-  const direct = path.join(root, 'BongMaster.app')
-  if (fs.existsSync(path.join(direct, 'Contents', 'Info.plist'))) return direct
-  const entries = await fsp.readdir(root, { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const candidate = path.join(root, entry.name)
-    if (fs.existsSync(path.join(candidate, 'Contents', 'Info.plist'))) return candidate
-  }
-  return null
-}
-
 const downloadAndInstall = async sender => {
   if (!app.isPackaged) throw new Error('开发模式不安装更新，请在打包版本中测试')
   if (process.platform !== 'darwin') throw new Error('当前更新器仅支持 macOS')
@@ -179,21 +166,30 @@ const downloadAndInstall = async sender => {
     stream.pipe(file)
     await finished(file)
 
-    sendProgress(sender, { phase: 'extracting', percent: 100 })
-    await extract(zipPath, { dir: root })
-    const newApp = await findExtractedApp(root)
-    if (!newApp) throw new Error('更新包里没有找到 BongMaster.app')
-
     const appPath = bundlePathFor()
     if (!fs.existsSync(appPath)) throw new Error('找不到当前应用安装位置')
 
     const scriptPath = path.join(root, 'install.sh')
     const backupPath = `${appPath}.old.${process.pid}`
+    const extractDir = path.join(root, 'extract')
     const script = `#!/bin/sh
 APP=${JSON.stringify(appPath)}
-NEW=${JSON.stringify(newApp)}
+ZIP=${JSON.stringify(zipPath)}
+EXTRACT=${JSON.stringify(extractDir)}
 BACKUP=${JSON.stringify(backupPath)}
 while pgrep -f "$APP/Contents/MacOS/BongMaster" >/dev/null 2>&1; do sleep 1; done
+rm -rf "$EXTRACT"
+mkdir -p "$EXTRACT"
+if ! /usr/bin/ditto -x -k "$ZIP" "$EXTRACT"; then
+  /usr/bin/open "$APP"
+  exit 1
+fi
+NEW="$EXTRACT/BongMaster.app"
+if [ ! -d "$NEW/Contents" ]; then
+  rm -rf "$EXTRACT"
+  /usr/bin/open "$APP"
+  exit 1
+fi
 rm -rf "$BACKUP"
 if mv "$APP" "$BACKUP"; then
   if /usr/bin/ditto "$NEW" "$APP"; then
@@ -208,13 +204,13 @@ if mv "$APP" "$BACKUP"; then
 else
   /usr/bin/open "$APP"
 fi
-rm -rf "$NEW"
+rm -rf "$EXTRACT"
 `
     await fsp.writeFile(scriptPath, script, { mode: 0o755 })
     const child = spawn('/bin/sh', [scriptPath], { detached: true, stdio: 'ignore' })
     child.unref()
     sendProgress(sender, { phase: 'installing' })
-    setTimeout(() => app.quit(), 800)
+    setTimeout(() => app.quit(), 1200)
     return { ok: true }
   } catch (error) {
     sendProgress(sender, { phase: 'error', message: error.message || '更新失败' })

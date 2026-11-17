@@ -1,6 +1,6 @@
 {
   "name": "bongmaster-vue",
-  "version": "5.2.0",
+  "version": "5.2.1",
   "description": "BongMaster - 项目管理桌面应用 with MCP Server support (Electron + Vue 3)",
   "main": "electron/main.js",
   "scripts": {
