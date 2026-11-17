@@ -332,3 +332,17 @@ await window.electronAPI.newMethod(data)
 - **better-sqlite3 是同步 API**, 不需要 async/await
 - **文件上传**: 渲染进程读取 ArrayBuffer → 转换为 Uint8Array 数组 → IPC 传递 → 主进程写入文件系统
 - **AI 工具调用**: 所有工具操作需要用户确认 (pendingActions 机制)
+
+## 自动更新与发布
+
+- 导航栏右侧的下载按钮会检查 `runfengyang/BongMaster` 的最新 Release。
+- 发现新版本后，可下载 `*-arm64-mac.zip`，自动替换 `/Applications/BongMaster.app` 并重启。
+- 仅支持 macOS arm64；应用需要放在当前用户可写的 Applications 目录。
+- 更新日志来自 GitHub Release（由提交记录自动生成），仓库内也维护 `CHANGELOG.md`。
+
+发布新版本：
+
+1. 修改 `package.json` 的 `version`
+2. 提交并推送 `main`
+3. 创建并推送 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`
+4. GitHub Actions 会自动构建 DMG/ZIP 并创建 Release

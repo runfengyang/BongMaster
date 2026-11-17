@@ -111,6 +111,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addReminderAttachmentFile: (reminderId, file) => ipcRenderer.invoke('reminderAttachment:addFile', reminderId, file),
   openReminderAttachment: (id) => ipcRenderer.invoke('reminderAttachment:open', id),
   deleteReminderAttachment: (id) => ipcRenderer.invoke('reminderAttachment:delete', id),
+
+  // ===== 应用更新 =====
+  getAppVersion: () => ipcRenderer.invoke('update:version'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  onUpdateProgress: (callback) => {
+    const listener = (event, payload) => callback(payload)
+    ipcRenderer.on('update:progress', listener)
+    return () => ipcRenderer.removeListener('update:progress', listener)
+  },
   onReminderFocus: (callback) => {
     const listener = (event, id) => callback(id)
     ipcRenderer.on('reminders:focus', listener)

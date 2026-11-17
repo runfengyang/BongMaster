@@ -7,6 +7,7 @@ const { ImageService } = require('./services/image-service')
 const { AppleNotesService } = require('./services/apple-notes-service')
 const { fetchSiteFavicon } = require('./services/favicon-service')
 const macCalendarService = require('./services/macos-calendar-service')
+const updateService = require('./services/update-service')
 const macRemindersService = require('./services/macos-reminders-service')
 const reminderMacSyncService = require('./services/reminder-mac-sync-service')
 const { ReminderNotificationService } = require('./services/reminder-notification-service')
@@ -606,6 +607,11 @@ const registerIpcHandlers = () => {
   ipcMain.handle('calendarMac:getSyncRecords', () => dbService.getMacSyncRecords())
   ipcMain.handle('calendarMac:saveSyncRecords', (event, records) => dbService.saveMacSyncRecords(records))
   ipcMain.handle('calendarMac:deleteSyncRecords', (event, keys) => dbService.deleteMacSyncRecords(keys))
+
+  // ===== 应用更新 =====
+  ipcMain.handle('update:check', () => updateService.checkForUpdates())
+  ipcMain.handle('update:download', event => updateService.downloadAndInstall(event.sender))
+  ipcMain.handle('update:version', () => app.getVersion())
 
   // ===== 娱乐中心 =====
   ipcMain.handle('entertainment:fetchFavicon', (event, url) => fetchSiteFavicon(url))

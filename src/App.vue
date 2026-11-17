@@ -46,6 +46,8 @@
       <div class="bm-navbar-actions">
         <SalaryWidget v-if="salaryStore.visible" />
 
+        <UpdateButton />
+
         <button
           class="bm-theme-toggle"
           @click="toggleThemeMenu"
@@ -147,6 +149,7 @@ import { useSalaryStore } from '@stores/salary-store'
 import EntertainmentView from '@views/EntertainmentView.vue'
 import UndoToast from '@components/UndoToast.vue'
 import SalaryWidget from '@components/SalaryWidget.vue'
+import UpdateButton from '@components/UpdateButton.vue'
 import { startMacAutoSync, stopMacAutoSync } from '@composables/useMacAutoSync'
 
 const themeStore = useThemeStore()
