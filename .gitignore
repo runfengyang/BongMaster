@@ -1,0 +1,34 @@
+node_modules/
+dist/
+dist-electron/
+
+# Local data, backups and large runtime assets
+backups/
+db-backups/
+archives/
+uploads/
+.uploads/
+work/
+sketches/
+ios-plan/
+
+# Local tooling / session metadata
+.claude/
+.codegraph/
+.codex-screenshots/
+.cursor/
+.kimi-code/
+.superpowers/
+
+# Secrets and local state
+.env
+.env.*
+!.env.example
+
+# Logs, databases, OS files
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+.DS_Store

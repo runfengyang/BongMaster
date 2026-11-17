@@ -1,0 +1,16 @@
+/* Balatro 视觉体系共享资源（§11）
+   m6x11 像素字体：Balatro 官方字体（自由许可，来源 balatrowiki.org/w/File:M6x11.ttf） */
+@font-face {
+  font-family: 'm6x11';
+  src: url('../assets/fonts/m6x11.ttf') format('truetype');
+  font-display: swap;
+}
+
+/* 牌面文字统一栈：拉丁/数字走 m6x11，CJK 回落系统字体 */
+.balatro-font,
+.pc-face,
+.pc-float,
+.pm-title,
+.pm-pack-name {
+  font-family: 'm6x11', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
+}

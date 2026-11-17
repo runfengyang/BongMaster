@@ -1,0 +1,242 @@
+/* ============================================
+   Page Illustration Backgrounds - Artistic Edition
+   插画风格艺术背景
+   ============================================ */
+
+/* ===== Dashboard - 首页 =====
+   抽象数据流 - 波浪线与圆形节点 */
+.page-bg-dashboard {
+  position: relative;
+  overflow: hidden;
+}
+
+.page-bg-dashboard::before {
+  content: '';
+  position: fixed;
+  top: -10%;
+  right: -5%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(46, 170, 220, 0.06) 0%,
+    rgba(46, 170, 220, 0.02) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-bg-dashboard::after {
+  content: '';
+  position: fixed;
+  bottom: -10%;
+  left: -5%;
+  width: 40vw;
+  height: 40vw;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(15, 123, 108, 0.04) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Dashboard Illustration */
+.dashboard-art {
+  position: fixed;
+  top: 100px;
+  right: 60px;
+  width: 260px;
+  height: 260px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== Projects - 项目管理 =====
+   建筑/结构 - 堆叠矩形与层次 */
+.page-bg-projects {
+  position: relative;
+}
+
+.page-bg-projects::before {
+  content: '';
+  position: fixed;
+  top: var(--bm-navbar-height);
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(90deg, rgba(227, 225, 219, 0.4) 1px, transparent 1px),
+    linear-gradient(rgba(227, 225, 219, 0.4) 1px, transparent 1px);
+  background-size: 80px 80px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-bg-projects::after {
+  content: '';
+  position: fixed;
+  top: var(--bm-navbar-height);
+  right: 0;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(247, 246, 243, 0.8) 30%,
+    rgba(247, 246, 243, 0.95) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.projects-art {
+  position: fixed;
+  bottom: 80px;
+  right: 40px;
+  width: 280px;
+  height: 220px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== Tasks - 任务看板 =====
+   流动线条 - 波浪与垂直流动 */
+.page-bg-tasks {
+  position: relative;
+}
+
+.page-bg-tasks::before {
+  content: '';
+  position: fixed;
+  top: var(--bm-navbar-height);
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(46, 170, 220, 0.015) 30%,
+    rgba(46, 170, 220, 0.015) 70%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tasks-art {
+  position: fixed;
+  top: 140px;
+  right: 40px;
+  width: 180px;
+  height: 360px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== Daily Tasks - 每日任务 =====
+   时间感 - 圆弧与柔和渐变 */
+.page-bg-daily {
+  position: relative;
+}
+
+.page-bg-daily::before {
+  content: '';
+  position: fixed;
+  top: var(--bm-navbar-height);
+  right: -10%;
+  width: 45vw;
+  height: 45vw;
+  background: radial-gradient(
+    circle at center,
+    rgba(245, 197, 24, 0.05) 0%,
+    rgba(245, 197, 24, 0.02) 50%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.daily-art {
+  position: fixed;
+  top: 120px;
+  right: 60px;
+  width: 160px;
+  height: 160px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== Project Detail - 项目详情 =====
+   简约装饰 - 右侧淡色条 */
+.page-bg-project-detail {
+  position: relative;
+}
+
+.page-bg-project-detail::before {
+  content: '';
+  position: fixed;
+  top: var(--bm-navbar-height);
+  right: 0;
+  width: 25%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(227, 225, 219, 0.3) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ===== Common Animations ===== */
+@keyframes artFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+    opacity: 0.5;
+  }
+}
+
+@keyframes artPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes artFlow {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 20; }
+}
+
+.art-float {
+  animation: artFloat 8s ease-in-out infinite;
+}
+
+.art-pulse {
+  animation: artPulse 5s ease-in-out infinite;
+}
+
+/* Responsive - 小屏幕隐藏插画 */
+@media (max-width: 1200px) {
+  .dashboard-art,
+  .projects-art,
+  .tasks-art,
+  .daily-art {
+    opacity: 0.2;
+    transform: scale(0.8);
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-art,
+  .projects-art,
+  .tasks-art,
+  .daily-art {
+    display: none;
+  }
+}
