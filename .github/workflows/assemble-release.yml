@@ -1,0 +1,41 @@
+name: Assemble release zip
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, e.g. v5.2.2'
+        required: true
+      parts:
+        description: 'Number of parts'
+        required: true
+        default: '12'
+      prefix:
+        description: 'Asset name prefix without .partNN'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download and join parts
+        env:
+          TAG: ${{ inputs.tag }}
+          PARTS: ${{ inputs.parts }}
+          PREFIX: ${{ inputs.prefix }}
+        run: |
+          mkdir -p out
+          for i in $(seq -w 1 "$PARTS"); do
+            curl -fsSL -o "out/part$i" "https://github.com/runfengyang/BongMaster/releases/download/$TAG/${PREFIX}.part$i"
+          done
+          cat out/part* > "$PREFIX"
+          ls -l "$PREFIX"
+      - name: Upload single asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+          PREFIX: ${{ inputs.prefix }}
+        run: gh release upload "$TAG" "$PREFIX" --repo runfengyang/BongMaster --clobber
