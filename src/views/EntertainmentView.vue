@@ -52,7 +52,7 @@
             title="管理显示的平台"
             aria-haspopup="dialog"
             :aria-expanded="settingsOpen"
-            @click.stop="settingsOpen = !settingsOpen"
+            @click.stop="toggleSettings"
           >
             <i class="fas fa-sliders-h"></i>
           </button>
@@ -131,17 +131,85 @@
             </div>
           </Transition>
         </div>
-        <div class="usage-pill" title="进入娱乐中心且窗口可见时累计">
-          <span>今日休闲</span>
-          <strong>{{ formatDuration(todayUsageSeconds) }}</strong>
+        <div class="usage-wrap">
+          <button
+            type="button"
+            class="usage-pill"
+            :class="{ active: usageOpen }"
+            title="今日休闲时间（前台且窗口有焦点时累计）"
+            aria-haspopup="dialog"
+            :aria-expanded="usageOpen"
+            @click.stop="toggleUsagePanel"
+          >
+            <span>今日休闲</span>
+            <strong>{{ formatDuration(todayUsageSeconds) }}</strong>
+          </button>
+          <Transition name="site-settings-pop">
+            <div v-if="usageOpen" class="usage-panel" role="dialog" aria-label="今日休闲统计" @click.stop>
+              <div class="usage-panel-head">
+                <span>今日休闲</span>
+                <strong>{{ formatDuration(todayUsageSeconds) }}</strong>
+              </div>
+
+              <div class="usage-limit-row">
+                <span>每日上限</span>
+                <select v-model.number="dailyLimitMinutes" aria-label="每日娱乐上限">
+                  <option :value="0">不提醒</option>
+                  <option :value="30">30 分钟</option>
+                  <option :value="45">45 分钟</option>
+                  <option :value="60">60 分钟</option>
+                  <option :value="90">90 分钟</option>
+                  <option :value="120">120 分钟</option>
+                </select>
+              </div>
+              <div v-if="dailyLimitMinutes > 0" class="usage-limit-meter">
+                <div class="usage-limit-bar"><span :class="{ over: usageLimitPercent >= 100 }" :style="{ width: `${usageLimitPercent}%` }"></span></div>
+                <small>{{ usageLimitPercent }}%</small>
+              </div>
+
+              <div class="usage-panel-section">
+                <div class="usage-panel-title">分平台</div>
+                <div v-if="siteUsageRows.length" class="usage-site-list">
+                  <div v-for="row in siteUsageRows" :key="row.id" class="usage-site-row">
+                    <img v-if="row.iconUrl" :src="row.iconUrl" class="usage-site-icon" alt="">
+                    <i v-else :class="row.icon" :style="{ color: row.color }"></i>
+                    <span class="usage-site-name">{{ row.name }}</span>
+                    <strong>{{ formatDuration(row.seconds) }}</strong>
+                  </div>
+                </div>
+                <p v-else class="usage-empty">今天还没有记录</p>
+              </div>
+
+              <div class="usage-panel-section">
+                <div class="usage-panel-title">近 7 天</div>
+                <div class="usage-week">
+                  <div v-for="day in weekUsage" :key="day.key" class="usage-day" :class="{ today: day.isToday }">
+                    <div class="usage-day-track">
+                      <span :style="{ height: `${day.percent}%` }"></span>
+                    </div>
+                    <small>{{ day.label }}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
 
+    <Transition name="usage-notice">
+      <div v-if="limitNoticeVisible" class="usage-notice" role="status">
+        <i class="fas fa-mug-hot" aria-hidden="true"></i>
+        <span>今天娱乐已经 {{ formatDuration(todayUsageSeconds) }}，起来活动一下吧。</span>
+        <button type="button" class="usage-notice-snooze" @click="snoozeLimitNotice">再玩 15 分钟</button>
+        <button type="button" class="usage-notice-close" aria-label="知道了" @click="dismissLimitNotice">知道了</button>
+      </div>
+    </Transition>
+
     <!-- Webview Container -->
     <div class="webview-container">
       <webview
-        v-for="site in visibleSites"
+        v-for="site in mountedSites"
         :key="site.id"
         :ref="(el) => setWebviewRef(el, site.id)"
         :src="site.url"
@@ -157,6 +225,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { formatDuration, pickWebviewsToKeep, shouldCountUsage, usageBarPercent } from '@utils/entertainment'
 
 const builtinSites = [
   {
@@ -205,6 +274,13 @@ const builtinSites = [
 
 const HIDDEN_SITES_KEY = 'bongmaster:entertainment:hidden-sites'
 const CUSTOM_SITES_KEY = 'bongmaster:entertainment:custom-sites'
+const SITE_USAGE_KEY = 'bongmaster:entertainment-usage-sites'
+const DAILY_LIMIT_KEY = 'bongmaster:entertainment:daily-limit'
+const LIMIT_DISMISSED_KEY = 'bongmaster:entertainment:limit-dismissed'
+const MAX_WARM_WEBVIEWS = 3
+const IDLE_DESTROY_MS = 10 * 60 * 1000
+const IDLE_AWAY_SECONDS = 300
+const LIMIT_SNOOZE_MS = 15 * 60 * 1000
 
 const normalizeHomeUrl = value => {
   const text = String(value || '').trim()
@@ -271,13 +347,75 @@ const canGoForward = ref(false)
 const currentUrl = ref(visibleSites.value[0]?.url || '')
 const isLoading = ref(false)
 const todayUsageSeconds = ref(0)
+const siteUsage = ref({})
+const mountedSiteIds = ref([])
+const recentSiteIds = ref([])
+const siteLastActive = ref({})
+const windowFocused = ref(true)
+const systemIdleSeconds = ref(0)
+const usageOpen = ref(false)
+const dailyLimitMinutes = ref(45)
+const limitNoticeVisible = ref(false)
+const limitDismissedDate = ref('')
+let limitSnoozeUntil = 0
 
 const route = useRoute()
 
 const activeSite = computed(() => sites.value.find(s => s.id === currentSite.value))
 const isEntertainmentActive = computed(() => route.path === '/entertainment')
+const mountedSites = computed(() => visibleSites.value.filter(site => mountedSiteIds.value.includes(site.id)))
+const usageLimitPercent = computed(() => usageBarPercent(todayUsageSeconds.value, dailyLimitMinutes.value))
+const siteUsageRows = computed(() => Object.entries(siteUsage.value)
+  .map(([id, seconds]) => {
+    const site = sites.value.find(item => item.id === id)
+    return {
+      id,
+      name: site?.name || '已移除的主页',
+      icon: site?.icon || 'fas fa-globe',
+      iconUrl: site?.iconUrl || '',
+      color: site?.color || 'var(--bm-text-muted)',
+      seconds: Number(seconds) || 0
+    }
+  })
+  .filter(row => row.seconds > 0)
+  .sort((a, b) => b.seconds - a.seconds))
+const weekUsage = computed(() => {
+  // 依赖今天的秒数，保证计时变化时重新计算。
+  const todaySeconds = todayUsageSeconds.value
+  const days = []
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const date = new Date()
+    date.setDate(date.getDate() - offset)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    let seconds = 0
+    if (offset === 0) seconds = todaySeconds
+    else {
+      try { seconds = Number(localStorage.getItem(`bongmaster:entertainment-usage:${key}`) || 0) || 0 } catch {}
+    }
+    days.push({
+      key,
+      label: '日一二三四五六'[date.getDay()],
+      seconds,
+      isToday: offset === 0
+    })
+  }
+  const max = Math.max(60, ...days.map(day => day.seconds))
+  return days.map(day => ({ ...day, percent: Math.max(day.seconds > 0 ? 6 : 0, Math.round((day.seconds / max) * 100)) }))
+})
+
+const toggleUsagePanel = () => {
+  usageOpen.value = !usageOpen.value
+  if (usageOpen.value) settingsOpen.value = false
+}
+
+const toggleSettings = () => {
+  settingsOpen.value = !settingsOpen.value
+  if (settingsOpen.value) usageOpen.value = false
+}
 
 let usageTicker = null
+let idleTicker = null
+let sweepTicker = null
 
 const setWebviewRef = (el, siteId) => {
   if (el) webviewRefs.value[siteId] = el
@@ -310,15 +448,68 @@ const scheduleSiteGliderUpdate = () => {
 
 const getActiveWebview = () => webviewRefs.value[currentSite.value]
 
+const applyWebviewMute = () => {
+  Object.entries(webviewRefs.value).forEach(([siteId, webview]) => {
+    try {
+      webview?.setAudioMuted?.(siteId !== currentSite.value)
+    } catch {}
+  })
+}
+
+const trimMountedSites = () => {
+  const keep = pickWebviewsToKeep({
+    mounted: mountedSiteIds.value,
+    recent: recentSiteIds.value,
+    current: currentSite.value,
+    max: MAX_WARM_WEBVIEWS
+  })
+  if (keep.length !== mountedSiteIds.value.length) {
+    mountedSiteIds.value = keep
+    recentSiteIds.value = recentSiteIds.value.filter(id => keep.includes(id))
+  }
+}
+
+const ensureSiteMounted = (siteId) => {
+  if (!visibleSites.value.some(site => site.id === siteId)) return
+  if (!mountedSiteIds.value.includes(siteId)) {
+    mountedSiteIds.value = [...mountedSiteIds.value, siteId]
+  }
+  recentSiteIds.value = [siteId, ...recentSiteIds.value.filter(id => id !== siteId)]
+  siteLastActive.value = { ...siteLastActive.value, [siteId]: Date.now() }
+  trimMountedSites()
+  nextTick(() => {
+    bindAllMounted()
+    applyWebviewMute()
+  })
+}
+
+const removeMountedSite = (siteId) => {
+  mountedSiteIds.value = mountedSiteIds.value.filter(id => id !== siteId)
+  recentSiteIds.value = recentSiteIds.value.filter(id => id !== siteId)
+}
+
+const sweepIdleWebviews = () => {
+  const now = Date.now()
+  const idleIds = mountedSiteIds.value.filter(id => (
+    id !== currentSite.value
+    && now - Number(siteLastActive.value[id] || 0) > IDLE_DESTROY_MS
+  ))
+  if (!idleIds.length) return
+  mountedSiteIds.value = mountedSiteIds.value.filter(id => !idleIds.includes(id))
+  recentSiteIds.value = recentSiteIds.value.filter(id => !idleIds.includes(id))
+}
+
 const switchSite = (siteId) => {
   if (!visibleSites.value.some(site => site.id === siteId)) return
   currentSite.value = siteId
+  ensureSiteMounted(siteId)
   scheduleSiteGliderUpdate()
   const site = sites.value.find(s => s.id === siteId)
   if (site) currentUrl.value = site.url
   const webview = webviewRefs.value[siteId]
   const webviewUrl = webview?.getURL?.()
   if (webviewUrl && webviewUrl !== 'about:blank') currentUrl.value = webviewUrl
+  applyWebviewMute()
   setTimeout(updateNavigationState, 100)
 }
 
@@ -339,6 +530,7 @@ const toggleSite = (siteId) => {
   try {
     localStorage.setItem(HIDDEN_SITES_KEY, JSON.stringify(hiddenIds.value))
   } catch {}
+  if (next.has(siteId)) removeMountedSite(siteId)
   if (!visibleSites.value.some(site => site.id === currentSite.value)) {
     const fallback = visibleSites.value[0]
     if (fallback) switchSite(fallback.id)
@@ -449,6 +641,7 @@ const removeCustomSite = site => {
       localStorage.setItem(HIDDEN_SITES_KEY, JSON.stringify(hiddenIds.value))
     } catch {}
   }
+  removeMountedSite(site.id)
   if (customForm.id === site.id) cancelCustomSite()
   if (currentSite.value === site.id) {
     const fallback = visibleSites.value[0]
@@ -457,14 +650,15 @@ const removeCustomSite = site => {
   scheduleSiteGliderUpdate()
 }
 
-const onSettingsPointerDown = event => {
-  if (!settingsOpen.value) return
-  if (event.target?.closest?.('.site-settings-wrap')) return
-  settingsOpen.value = false
+const onGlobalPointerDown = event => {
+  if (settingsOpen.value && !event.target?.closest?.('.site-settings-wrap')) settingsOpen.value = false
+  if (usageOpen.value && !event.target?.closest?.('.usage-wrap')) usageOpen.value = false
 }
 
 const onSettingsKeydown = event => {
-  if (event.key === 'Escape' && settingsOpen.value) settingsOpen.value = false
+  if (event.key !== 'Escape') return
+  settingsOpen.value = false
+  usageOpen.value = false
 }
 
 const goBack = () => {
@@ -580,46 +774,50 @@ const injectPopupInterceptor = (webview) => {
   `).catch(() => {})
 }
 
-const bindWebviewEvents = () => {
-  sites.value.forEach(site => {
-    const webview = webviewRefs.value[site.id]
-    if (webview && !webview._eventsBound) {
-      webview.addEventListener('dom-ready', () => {
-        injectPopupInterceptor(webview)
-      })
-      webview.addEventListener('did-navigate', (e) => {
-        if (currentSite.value === site.id) updateCurrentUrl(e.url)
-      })
-      webview.addEventListener('did-navigate-in-page', (e) => {
-        if (currentSite.value === site.id) updateCurrentUrl(e.url)
-      })
-      webview.addEventListener('did-start-loading', () => {
-        if (currentSite.value === site.id) isLoading.value = true
-      })
-      webview.addEventListener('did-stop-loading', () => {
-        if (currentSite.value === site.id) {
-          isLoading.value = false
-          updateNavigationState()
-        }
-      })
-      webview.addEventListener('did-finish-load', () => {
-        injectPopupInterceptor(webview)
-        if (currentSite.value === site.id) updateNavigationState()
-      })
-      webview.addEventListener('new-window', (e) => {
-        e.preventDefault()
-        openInsideWebview(webview, e.url)
-      })
-      webview.addEventListener('will-navigate', (e) => {
-        if (!shouldOpenInsideWebview(e.url)) {
-          e.preventDefault()
-          return
-        }
-        if (currentSite.value === site.id) updateCurrentUrl(e.url)
-      })
-      webview._eventsBound = true
+const bindWebviewEvents = (siteId) => {
+  const webview = webviewRefs.value[siteId]
+  if (!webview || webview._eventsBound) return
+  webview.addEventListener('dom-ready', () => {
+    injectPopupInterceptor(webview)
+    applyWebviewMute()
+  })
+  webview.addEventListener('did-navigate', (e) => {
+    if (currentSite.value === siteId) updateCurrentUrl(e.url)
+  })
+  webview.addEventListener('did-navigate-in-page', (e) => {
+    if (currentSite.value === siteId) updateCurrentUrl(e.url)
+  })
+  webview.addEventListener('did-start-loading', () => {
+    if (currentSite.value === siteId) isLoading.value = true
+  })
+  webview.addEventListener('did-stop-loading', () => {
+    if (currentSite.value === siteId) {
+      isLoading.value = false
+      updateNavigationState()
     }
   })
+  webview.addEventListener('did-finish-load', () => {
+    injectPopupInterceptor(webview)
+    if (currentSite.value === siteId) updateNavigationState()
+    applyWebviewMute()
+  })
+  webview.addEventListener('new-window', (e) => {
+    e.preventDefault()
+    openInsideWebview(webview, e.url)
+  })
+  webview.addEventListener('will-navigate', (e) => {
+    if (!shouldOpenInsideWebview(e.url)) {
+      e.preventDefault()
+      return
+    }
+    if (currentSite.value === siteId) updateCurrentUrl(e.url)
+  })
+  webview._eventsBound = true
+}
+
+const bindAllMounted = () => {
+  mountedSiteIds.value.forEach(siteId => bindWebviewEvents(siteId))
+  applyWebviewMute()
 }
 
 const getDateKey = () => {
@@ -631,16 +829,54 @@ const getDateKey = () => {
 }
 
 const getUsageStorageKey = () => `bongmaster:entertainment-usage:${getDateKey()}`
+const getSiteUsageStorageKey = () => `${SITE_USAGE_KEY}:${getDateKey()}`
+const getLimitDismissedKey = () => `${LIMIT_DISMISSED_KEY}:${getDateKey()}`
 
 let usageDateKey = ''
 
+const readDailyLimit = () => {
+  try {
+    const raw = localStorage.getItem(DAILY_LIMIT_KEY)
+    if (raw === null || raw === '') return 45
+    const value = Number(raw)
+    if ([0, 30, 45, 60, 90, 120].includes(value)) return value
+  } catch {}
+  return 45
+}
+
+const loadSiteUsage = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getSiteUsageStorageKey()) || '{}')
+    if (!parsed || typeof parsed !== 'object') return {}
+    return Object.fromEntries(Object.entries(parsed)
+      .map(([id, seconds]) => [id, Math.max(0, Math.min(86400, Number(seconds) || 0))])
+      .filter(([, seconds]) => seconds > 0))
+  } catch {
+    return {}
+  }
+}
+
+const saveSiteUsage = () => {
+  if (usageDateKey !== getDateKey()) return
+  try {
+    localStorage.setItem(getSiteUsageStorageKey(), JSON.stringify(siteUsage.value))
+  } catch {}
+}
+
 const loadTodayUsage = () => {
   usageDateKey = getDateKey()
+  dailyLimitMinutes.value = readDailyLimit()
   try {
     const parsed = Number(localStorage.getItem(getUsageStorageKey()) || 0)
     todayUsageSeconds.value = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 86400) : 0
   } catch {
     todayUsageSeconds.value = 0
+  }
+  siteUsage.value = loadSiteUsage()
+  try {
+    limitDismissedDate.value = localStorage.getItem(getLimitDismissedKey()) || ''
+  } catch {
+    limitDismissedDate.value = ''
   }
 }
 
@@ -649,15 +885,57 @@ const saveTodayUsage = () => {
   try {
     localStorage.setItem(getUsageStorageKey(), String(todayUsageSeconds.value))
   } catch {}
+  saveSiteUsage()
 }
 
-const formatDuration = (seconds) => {
-  const safeSeconds = Math.max(0, seconds)
-  const hours = Math.floor(safeSeconds / 3600)
-  const minutes = Math.floor((safeSeconds % 3600) / 60)
-  if (hours > 0) return `${hours}h ${minutes}m`
-  if (minutes > 0) return `${minutes}m`
-  return `${safeSeconds}s`
+const maybeShowLimitNotice = () => {
+  const limit = Number(dailyLimitMinutes.value) || 0
+  if (limit <= 0 || todayUsageSeconds.value < limit * 60) {
+    limitNoticeVisible.value = false
+    return
+  }
+  if (limitDismissedDate.value === getDateKey()) return
+  if (Date.now() < limitSnoozeUntil) return
+  limitNoticeVisible.value = true
+}
+
+const dismissLimitNotice = () => {
+  limitNoticeVisible.value = false
+  limitDismissedDate.value = getDateKey()
+  try {
+    localStorage.setItem(getLimitDismissedKey(), getDateKey())
+  } catch {}
+}
+
+const snoozeLimitNotice = () => {
+  limitNoticeVisible.value = false
+  limitSnoozeUntil = Date.now() + LIMIT_SNOOZE_MS
+}
+
+const onWindowFocus = () => {
+  windowFocused.value = true
+}
+
+const onWindowBlur = () => {
+  windowFocused.value = false
+  saveTodayUsage()
+}
+
+const refreshSystemIdle = async () => {
+  try {
+    const value = await window.electronAPI?.getSystemIdleSeconds?.()
+    systemIdleSeconds.value = Number.isFinite(value) ? Math.max(0, value) : 0
+  } catch {
+    systemIdleSeconds.value = 0
+  }
+}
+
+const activeWebviewAudible = () => {
+  try {
+    return Boolean(getActiveWebview()?.isCurrentlyAudible?.())
+  } catch {
+    return false
+  }
 }
 
 const tickUsage = () => {
@@ -665,39 +943,83 @@ const tickUsage = () => {
   if (dateKey !== usageDateKey) {
     usageDateKey = dateKey
     todayUsageSeconds.value = 0
+    siteUsage.value = {}
+    limitDismissedDate.value = ''
+    limitNoticeVisible.value = false
   }
-  if (!isEntertainmentActive.value || document.hidden) return
+  const shouldCount = shouldCountUsage({
+    pageActive: isEntertainmentActive.value,
+    hidden: document.hidden,
+    focused: windowFocused.value,
+    idleSeconds: systemIdleSeconds.value,
+    audible: activeWebviewAudible(),
+    idleAwaySeconds: IDLE_AWAY_SECONDS
+  })
+  if (!shouldCount) return
   todayUsageSeconds.value += 1
+  const siteId = currentSite.value
+  if (siteId) {
+    siteUsage.value = { ...siteUsage.value, [siteId]: (siteUsage.value[siteId] || 0) + 1 }
+  }
   if (todayUsageSeconds.value % 5 === 0) saveTodayUsage()
+  maybeShowLimitNotice()
 }
+
+watch(dailyLimitMinutes, value => {
+  try {
+    localStorage.setItem(DAILY_LIMIT_KEY, String(value))
+  } catch {}
+  if (Number(value) <= 0) limitNoticeVisible.value = false
+  else maybeShowLimitNotice()
+})
 
 const handleVisibilityChange = () => {
   if (document.hidden) saveTodayUsage()
 }
 
-watch(visibleSites, () => {
+watch(visibleSites, list => {
+  const ids = new Set(list.map(site => site.id))
+  mountedSiteIds.value = mountedSiteIds.value.filter(id => ids.has(id))
+  recentSiteIds.value = recentSiteIds.value.filter(id => ids.has(id))
+  if (!ids.has(currentSite.value) && list.length) switchSite(list[0].id)
   scheduleSiteGliderUpdate()
-  nextTick(() => {
-    window.setTimeout(bindWebviewEvents, 0)
-  })
+  nextTick(bindAllMounted)
 })
+
+watch(mountedSiteIds, () => {
+  nextTick(() => {
+    bindAllMounted()
+    applyWebviewMute()
+  })
+}, { flush: 'post' })
 
 onMounted(() => {
   scheduleSiteGliderUpdate()
-  window.addEventListener('resize', scheduleSiteGliderUpdate)
-  document.addEventListener('pointerdown', onSettingsPointerDown)
-  document.addEventListener('keydown', onSettingsKeydown)
+  windowFocused.value = document.hasFocus()
   loadTodayUsage()
-  setTimeout(bindWebviewEvents, 500)
+  maybeShowLimitNotice()
+  ensureSiteMounted(currentSite.value)
+  refreshSystemIdle()
+  window.addEventListener('resize', scheduleSiteGliderUpdate)
+  window.addEventListener('focus', onWindowFocus)
+  window.addEventListener('blur', onWindowBlur)
+  document.addEventListener('pointerdown', onGlobalPointerDown)
+  document.addEventListener('keydown', onSettingsKeydown)
   usageTicker = window.setInterval(tickUsage, 1000)
+  idleTicker = window.setInterval(refreshSystemIdle, 5000)
+  sweepTicker = window.setInterval(sweepIdleWebviews, 60000)
   document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', scheduleSiteGliderUpdate)
-  document.removeEventListener('pointerdown', onSettingsPointerDown)
+  window.removeEventListener('focus', onWindowFocus)
+  window.removeEventListener('blur', onWindowBlur)
+  document.removeEventListener('pointerdown', onGlobalPointerDown)
   document.removeEventListener('keydown', onSettingsKeydown)
   if (usageTicker) window.clearInterval(usageTicker)
+  if (idleTicker) window.clearInterval(idleTicker)
+  if (sweepTicker) window.clearInterval(sweepTicker)
   saveTodayUsage()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   Object.values(webviewRefs.value).forEach(webview => {
@@ -708,6 +1030,7 @@ onUnmounted(() => {
 
 <style scoped>
 .entertainment-view {
+  position: relative;
   height: calc(100vh - var(--bm-navbar-height));
   display: flex;
   flex-direction: column;
@@ -1096,6 +1419,285 @@ onUnmounted(() => {
   font-size: 0.78125rem;
   font-weight: 600;
   color: var(--bm-text-primary);
+}
+
+.usage-wrap {
+  position: relative;
+  display: flex;
+}
+
+.usage-pill {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.usage-pill:hover,
+.usage-pill.active {
+  background: var(--bm-bg-hover);
+}
+
+.usage-pill:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bm-accent-blue) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.usage-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 300px;
+  padding: 10px;
+  border: 1px solid var(--bm-border-default);
+  border-radius: var(--bm-radius-md);
+  background: var(--bm-bg-card);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 0.18);
+  color: var(--bm-text-primary);
+}
+
+.usage-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 2px 4px 8px;
+}
+
+.usage-panel-head span {
+  color: var(--bm-text-muted);
+  font-size: 0.6875rem;
+}
+
+.usage-panel-head strong {
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-limit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px;
+  color: var(--bm-text-secondary);
+  font-size: 0.6875rem;
+}
+
+.usage-limit-row select {
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--bm-border-default);
+  border-radius: 6px;
+  background: var(--bm-bg-card);
+  color: var(--bm-text-primary);
+  font: inherit;
+  font-size: 0.6875rem;
+}
+
+.usage-limit-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 2px;
+}
+
+.usage-limit-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bm-bg-active);
+  overflow: hidden;
+}
+
+.usage-limit-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--bm-accent-blue);
+  transition: width 240ms ease;
+}
+
+.usage-limit-bar span.over {
+  background: var(--bm-accent-orange);
+}
+
+.usage-limit-meter small {
+  width: 32px;
+  text-align: right;
+  color: var(--bm-text-muted);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-panel-section {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bm-border-subtle);
+}
+
+.usage-panel-title {
+  padding: 0 4px 6px;
+  color: var(--bm-text-muted);
+  font-size: 0.6875rem;
+}
+
+.usage-site-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.usage-site-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: 5px;
+  font-size: 0.75rem;
+}
+
+.usage-site-row:hover {
+  background: var(--bm-bg-hover);
+}
+
+.usage-site-row i {
+  width: 14px;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.usage-site-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.usage-site-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-site-row strong {
+  font-weight: 500;
+  color: var(--bm-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-empty {
+  margin: 0;
+  padding: 0 4px 2px;
+  color: var(--bm-text-muted);
+  font-size: 0.6875rem;
+}
+
+.usage-week {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 2px 4px 0;
+  height: 64px;
+}
+
+.usage-day {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.usage-day-track {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bm-bg-hover) 55%, transparent);
+  overflow: hidden;
+}
+
+.usage-day-track span {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in srgb, var(--bm-accent-blue) 55%, transparent);
+  transition: height 240ms ease;
+}
+
+.usage-day.today .usage-day-track span {
+  background: var(--bm-accent-blue);
+}
+
+.usage-day small {
+  color: var(--bm-text-muted);
+  font-size: 0.625rem;
+}
+
+.usage-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--bm-border-default);
+  border-radius: 999px;
+  background: var(--bm-bg-card);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.16);
+  color: var(--bm-text-primary);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.usage-notice i {
+  color: var(--bm-accent-orange);
+}
+
+.usage-notice button {
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.usage-notice-snooze {
+  color: var(--bm-text-secondary);
+}
+
+.usage-notice-snooze:hover {
+  background: var(--bm-bg-hover);
+}
+
+.usage-notice-close {
+  background: var(--bm-accent-blue);
+  color: #fff;
+}
+
+.usage-notice-close:hover {
+  background: var(--bm-accent-blue-hover);
+}
+
+.usage-notice-enter-active,
+.usage-notice-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.usage-notice-enter-from,
+.usage-notice-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 6px);
 }
 
 .webview-container {
