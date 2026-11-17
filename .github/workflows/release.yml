@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-13
+    runs-on: macos-14
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
