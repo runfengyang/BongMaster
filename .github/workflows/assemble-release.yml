@@ -23,15 +23,15 @@ jobs:
     steps:
       - name: Download and join parts
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
           PARTS: ${{ inputs.parts }}
           PREFIX: ${{ inputs.prefix }}
         run: |
           mkdir -p out
-          for i in $(seq -w 1 "$PARTS"); do
-            curl -fsSL -o "out/part$i" "https://github.com/runfengyang/BongMaster/releases/download/$TAG/${PREFIX}.part$i"
-          done
-          cat out/part* > "$PREFIX"
+          gh release download "$TAG" --pattern "${PREFIX}.part*" --dir out --repo "$GITHUB_REPOSITORY"
+          test "$(ls out/"${PREFIX}".part* | wc -l)" -eq "$PARTS"
+          cat $(ls out/"${PREFIX}".part* | sort -V) > "$PREFIX"
           ls -l "$PREFIX"
       - name: Upload single asset
         env:
