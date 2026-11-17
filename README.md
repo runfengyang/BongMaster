@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="BongMaster" width="100%">
+  <img src="docs/banner-brand.png" alt="BongMaster" width="100%">
 </p>
 
 **把项目、任务、日历、提醒、习惯和便签放进同一个窗口的本地工作台。**
