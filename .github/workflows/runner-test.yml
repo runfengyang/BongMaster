@@ -1,0 +1,12 @@
+name: Runner test
+on:
+  workflow_dispatch:
+jobs:
+  macos13:
+    runs-on: macos-13
+    steps:
+      - run: uname -a
+  macos14:
+    runs-on: macos-14
+    steps:
+      - run: uname -a
