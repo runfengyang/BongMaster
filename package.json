@@ -1,6 +1,6 @@
 {
   "name": "bongmaster-vue",
-  "version": "5.2.2",
+  "version": "5.2.4",
   "description": "BongMaster - 项目管理桌面应用 with MCP Server support (Electron + Vue 3)",
   "main": "electron/main.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "build": "npm run build:vite && npm run build:electron",
     "build:vite": "vite build",
     "build:electron": "electron-builder",
+    "build:win": "npm run build:vite && electron-builder --win nsis --x64",
     "preview": "vite preview",
     "release": "bash scripts/release.sh"
   },
@@ -75,6 +76,26 @@
       ],
       "hardenedRuntime": false,
       "gatekeeperAssess": false
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "BongMaster-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BongMaster"
     }
   }
 }

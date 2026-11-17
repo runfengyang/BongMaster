@@ -17,7 +17,7 @@
             <span v-else-if="syncStatus" class="cp-sync-inline cp-sync-inline-status" role="status" :title="syncStatus">{{ syncStatus }}</span>
           </div>
           <div class="cp-header-side right">
-            <div class="cp-sync-wrap">
+            <div v-if="isMac" class="cp-sync-wrap">
               <button type="button" class="bm-btn bm-btn-ghost bm-btn-icon cp-sync-button" title="macOS 日历同步" aria-label="macOS 日历同步" :disabled="syncing" @click.stop="toggleSyncMenu">
                 <ReminderIcon name="sync" :size="16" :class="{ 'cp-spin': syncing }" />
               </button>
@@ -163,6 +163,7 @@ import { useUndoStore } from '@stores/undo-store'
 import { useCalendarProSettings } from '@stores/calendar-pro-settings'
 import { colorHex } from '@utils/reminders'
 import { buildIcsFromOccurrences } from '@utils/calendar-ics.js'
+import { isMac } from '@utils/platform'
 import { syncCalendarWithMac } from '../services/mac-calendar-sync.js'
 import {
   expandOccurrences,

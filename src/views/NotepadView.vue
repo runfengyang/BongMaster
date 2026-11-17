@@ -392,6 +392,7 @@
               <div class="toolbar-spacer"></div>
 
               <button
+                v-if="isMac"
                 class="toolbar-btn apple-notes-btn"
                 :class="{ active: selectedNote.apple_note_id }"
                 :disabled="isSyncingAppleNotes"
@@ -536,6 +537,7 @@ import MarkdownTextareaEditor from '@components/MarkdownTextareaEditor.vue'
 import MarkdownPreviewPane from '@components/MarkdownPreviewPane.vue'
 import { useAutosaveNote } from '@composables/useAutosaveNote.js'
 import { applyMarkdownCommandToValue } from '@composables/useMarkdownCommands.js'
+import { isMac } from '@utils/platform'
 
 const route = useRoute()
 const notepadStore = useNotepadStore()

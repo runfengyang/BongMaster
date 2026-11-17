@@ -1,6 +1,7 @@
 import { addMonths, endOfMonth, format, startOfMonth, subMonths } from 'date-fns'
 import { useCalendarStore } from '@stores/calendar-store'
 import { expandOccurrences } from '@utils/calendar-pro.js'
+import { isMac } from '@utils/platform'
 import { syncCalendarWithMac } from '../services/mac-calendar-sync.js'
 
 const INTERVAL_MS = 5 * 60 * 1000
@@ -64,7 +65,7 @@ const tick = async () => {
 }
 
 export function startMacAutoSync() {
-  if (intervalId) return
+  if (!isMac || intervalId) return
   firstRunId = window.setTimeout(tick, FIRST_RUN_MS)
   intervalId = window.setInterval(tick, INTERVAL_MS)
 }

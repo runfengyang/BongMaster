@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  platform: process.platform,
+
   // ===== 删除撤回 API =====
   // 删除是软删除，撤回 = 清掉 deleted_at，保留原 id 与全部关联。
   restoreEntities: (tableName, ids) => ipcRenderer.invoke('entity:restore', tableName, ids),
@@ -41,6 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ===== 娱乐中心 API =====
   fetchFavicon: (url) => ipcRenderer.invoke('entertainment:fetchFavicon', url),
+  getSystemIdleSeconds: () => ipcRenderer.invoke('system:idleSeconds'),
 
   // ===== 上班打卡 API =====
   getWorkAttendanceRange: (startDate, endDate) => ipcRenderer.invoke('workAttendance:getRange', startDate, endDate),

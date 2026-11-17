@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, powerMonitor } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { DatabaseService } = require('./services/database-service')
@@ -23,6 +23,10 @@ let permissionsConfigured = false
 let webContentsSecurityConfigured = false
 const hardenedWebContents = new WeakSet()
 const isMcpServerMode = process.argv.includes('--mcp-server')
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.bongmaster.app')
+}
 const SYNC_SERVER_URL = process.env.BONGMASTER_SYNC_URL || 'http://localhost:3000'
 const SPELLCHECK_SETTINGS_FILE = 'editor-settings.json'
 const SPELLCHECK_LANGUAGES = [
@@ -816,6 +820,13 @@ const registerIpcHandlers = () => {
 
   // ===== 应用功能 =====
   ipcMain.handle('app:getDataDir', () => getUserDataPath())
+  ipcMain.handle('system:idleSeconds', () => {
+    try {
+      return powerMonitor.getSystemIdleTime()
+    } catch {
+      return 0
+    }
+  })
   ipcMain.handle('app:openDataDir', () => {
     const dataDir = getUserDataPath()
     shell.openPath(dataDir)

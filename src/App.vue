@@ -151,6 +151,7 @@ import UndoToast from '@components/UndoToast.vue'
 import SalaryWidget from '@components/SalaryWidget.vue'
 import UpdateButton from '@components/UpdateButton.vue'
 import { startMacAutoSync, stopMacAutoSync } from '@composables/useMacAutoSync'
+import { isMac } from '@utils/platform'
 
 const themeStore = useThemeStore()
 const projectStore = useProjectStore()
@@ -292,13 +293,13 @@ onMounted(() => {
   window.addEventListener('resize', scheduleNavGliderUpdate)
   document.addEventListener('click', handleClickOutside)
   projectStore.fetchProjects()
-  startMacAutoSync()
+  if (isMac) startMacAutoSync()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', scheduleNavGliderUpdate)
   document.removeEventListener('click', handleClickOutside)
-  stopMacAutoSync()
+  if (isMac) stopMacAutoSync()
   if (storageNoticeTimer) clearTimeout(storageNoticeTimer)
   if (brandEggTimer) clearTimeout(brandEggTimer)
   if (brandClickTimer) clearTimeout(brandClickTimer)

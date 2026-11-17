@@ -4,9 +4,9 @@
 
 :root {
   /* Typography: two fixed rails (UI/data), one theme-driven reading rail */
-  --bm-font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
-  --bm-font-display: 'Iowan Old Style', 'Songti SC', 'STSong', Georgia, serif;
-  --bm-font-reading: 'Iowan Old Style', 'Songti SC', 'STSong', Georgia, serif;
+  --bm-font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
+  --bm-font-display: 'Iowan Old Style', 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'SimSun', Georgia, serif;
+  --bm-font-reading: 'Iowan Old Style', 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'SimSun', Georgia, serif;
   --bm-font-data: 'SFMono-Regular', Menlo, Consolas, 'PT Mono', 'Liberation Mono', Courier, monospace;
   --bm-font-mono: 'SFMono-Regular', Menlo, Consolas, 'PT Mono', 'Liberation Mono', Courier, monospace;
   --bm-font-brand: var(--bm-font-ui);
@@ -114,8 +114,8 @@ html[data-theme='times'] {
 }
 
 html[data-theme='paper'] {
-  --bm-font-display: 'Iowan Old Style', 'Songti SC', 'STSong', 'Noto Serif CJK SC', Georgia, serif;
-  --bm-font-reading: 'Iowan Old Style', 'Songti SC', 'STSong', 'Noto Serif CJK SC', Georgia, serif;
+  --bm-font-display: 'Iowan Old Style', 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'SimSun', Georgia, serif;
+  --bm-font-reading: 'Iowan Old Style', 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'SimSun', Georgia, serif;
 
   --bm-bg-page: #faf9f5;
   --bm-bg-card: #ffffff;

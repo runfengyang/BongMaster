@@ -67,7 +67,7 @@
           <button type="button" class="bm-btn bm-btn-ghost bm-btn-icon" title="每日统计" @click="toggleStats">
             <ReminderIcon name="chart" :size="16" />
           </button>
-          <div class="rm-sync-wrap">
+          <div v-if="isMac" class="rm-sync-wrap">
             <button
               type="button"
               class="bm-btn bm-btn-ghost bm-btn-icon"
@@ -192,6 +192,7 @@ import { useReminderStore } from '@stores/reminder-store'
 import { useProjectStore } from '@stores/project-store'
 import { useUndoStore } from '@stores/undo-store'
 import { dateKey } from '@utils/reminders'
+import { isMac } from '@utils/platform'
 
 const route = useRoute()
 const router = useRouter()

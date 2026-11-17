@@ -49,13 +49,15 @@
             </div>
             <div v-if="result.notes" class="update-notes">{{ result.notes }}</div>
             <p v-if="!canInstall" class="update-hint">
-              {{ result.platform !== 'darwin' ? '当前版本仅支持 macOS 自动安装。' : '开发模式不自动安装，请使用打包版本。' }}
+              {{ result.platform !== 'darwin' ? 'Windows 版请从 Release 下载安装包。' : '开发模式不自动安装，请使用打包版本。' }}
             </p>
             <div class="update-actions">
-              <button type="button" class="update-primary" :disabled="!canInstall" @click="install">
+              <button v-if="canInstall" type="button" class="update-primary" @click="install">
                 下载更新
               </button>
-              <button type="button" class="update-secondary" @click="openRelease">查看 Release</button>
+              <button type="button" class="update-secondary" @click="openRelease">
+                {{ canInstall ? '查看 Release' : '前往 Release 下载' }}
+              </button>
             </div>
           </div>
           <div v-else-if="result" class="update-state">已是最新版本 v{{ result.currentVersion }}</div>
